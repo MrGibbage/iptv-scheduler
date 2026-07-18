@@ -6,6 +6,14 @@ A companion web service to [iptv-recorder](/srv/iptv-recorder/PLAN.md) — the c
 
 Runs on docker-server or smavm — likely alongside iptv-recorder, host TBD.
 
+## Secrets Handling
+
+This repo is **public**, same as iptv-recorder. Applies here too — this service will hold at least an API key for calling iptv-recorder, and possibly credentials for a secondary EPG source:
+
+- No real credentials, API keys, tokens, or `.env` files with live values are ever committed. Real config lives outside the repo or in a git-ignored file; only a placeholder `.env.example`/template is tracked.
+- `.gitignore` must cover the real config/secrets file(s) from day one of actual implementation.
+- Real credentials/keys for this project shouldn't be pasted into Claude chat sessions either — describe config by shape/placeholder, not real value.
+
 ## Relationship to iptv-recorder
 
 Division of responsibility (mirrors the note in iptv-recorder's plan):
@@ -64,3 +72,4 @@ Because iptv-recorder has no concept of duplicate content, iptv-scheduler is res
 - [ ] **TODO2:** Design duplicate-detection matching strategy (episode identity fallback chain).
 - [ ] **TODO3:** Decide EPG source(s) and ingestion/caching approach.
 - [ ] **TODO3:** Design conflict-resolution/preemption policy.
+- [ ] **TODO1:** Add `.gitignore` for real config/secrets + a placeholder `.env.example` before any real config file is created.
