@@ -14,6 +14,23 @@ This repo is **public**, same as iptv-recorder. Applies here too — this servic
 - `.gitignore` must cover the real config/secrets file(s) from day one of actual implementation.
 - Real credentials/keys for this project shouldn't be pasted into Claude chat sessions either — describe config by shape/placeholder, not real value.
 
+## Tech Stack
+
+Decided (mirrors [iptv-recorder](/srv/iptv-recorder/PLAN.md), which hit this same open question first):
+- **Backend:** Node.js + TypeScript, Fastify for the HTTP layer.
+- **Database:** SQLite via Drizzle ORM + better-sqlite3.
+- **UI:** React + Vite SPA — this also resolves the "own API/UI vs. headless" open question below: iptv-scheduler exposes its own API and a web UI, it isn't purely a background service. Dev-mode Vite proxies `/api` to the Fastify server.
+- **Package manager:** pnpm (workspace with `server/` + `web/` packages).
+- **Host:** docker-server (alongside iptv-recorder).
+
+**Repo layout:** same shape as iptv-recorder — pnpm workspace root + `server/` + `web/` packages. `.env`/`.env.example` live in `server/`, not the repo root (see iptv-recorder's Tech Stack note for why — `dotenv/config` resolves relative to `process.cwd()`, which is the package dir under `pnpm --filter`). Scaffolded and verified booting end-to-end (health check + Vite API proxy) 2026-07-19. No real DB tables yet — `schema.ts` is a placeholder pending the rule-schema design (TODO2).
+
+## EPG Source
+
+Decided: guide data comes only from the Xtream provider's own EPG endpoint, no secondary XMLTV source for now. Revisit only if that data proves inaccurate/incomplete in practice.
+
+This is entirely iptv-scheduler's concern — iptv-recorder has and needs zero EPG awareness. iptv-scheduler ingests/caches the Xtream EPG, matches rules against it, resolves a rule match down to a concrete channel + time slot, and calls iptv-recorder's plain `POST /recordings` (`provider_id` + `channel_id` + start/end time) exactly like any other client would. No title, episode, or guide data ever crosses that API boundary.
+
 ## Relationship to iptv-recorder
 
 Division of responsibility (mirrors the note in iptv-recorder's plan):
@@ -60,16 +77,13 @@ Because iptv-recorder has no concept of duplicate content, iptv-scheduler is res
 
 ## Open Questions
 
-- **Own API surface:** does iptv-scheduler expose its own API (for a web UI, or for Lao to query rules/history directly), or is it purely a background service that only talks *to* iptv-recorder? Leaning toward "yes, it needs one" since it's described as a web service with its own UI, but not decided.
 - **Polling vs. push:** how does iptv-scheduler learn about state changes in iptv-recorder (new recording completed, one failed)? Polling `GET /recordings` periodically is the simple starting point — reconsider if it's ever not fast/efficient enough.
-- **EPG source(s):** confirm whether guide data comes only from the Xtream provider's own EPG endpoint, or whether a secondary XMLTV source is needed for accuracy.
 - **Conflict resolution policy default:** what's the default behavior for preemption (always preempt lower priority, or ask/notify first)?
 
 ## Open Items
 
-- [ ] **TODO1:** Decide whether iptv-scheduler exposes its own API/UI or stays a headless background service.
 - [ ] **TODO2:** Design rule schema (series/keyword/genre/channel rules, priority field).
 - [ ] **TODO2:** Design duplicate-detection matching strategy (episode identity fallback chain).
-- [ ] **TODO3:** Decide EPG source(s) and ingestion/caching approach.
+- [ ] **TODO3:** Design EPG ingestion/caching approach (source decided — see EPG Source section).
 - [ ] **TODO3:** Design conflict-resolution/preemption policy.
-- [ ] **TODO1:** Add `.gitignore` for real config/secrets + a placeholder `.env.example` before any real config file is created.
+- [x] **TODO1:** Add `.gitignore` for real config/secrets + a placeholder `.env.example` before any real config file is created. Done as part of scaffolding — `.env.example` lives in `server/.env.example` (not repo root); see [iptv-recorder's PLAN.md](/srv/iptv-recorder/PLAN.md) for why (`dotenv/config` resolves relative to `process.cwd()`, which is `server/` under `pnpm --filter`).
