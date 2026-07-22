@@ -193,6 +193,76 @@ export const channels = sqliteTable(
   }),
 );
 
+// Dedup ledger for rule execution (PLAN.md "Minimal rule execution") — one
+// row per successfully-submitted iptv-recorder recording. Keyed on
+// (providerId, channelId, startTime), the same natural key epg_programs
+// itself uses, deliberately NOT including ruleId: if two different rules
+// both match the same real airing, it should still only ever be scheduled
+// once. A rejected submission (iptv-recorder 409s/400s/404s) gets no row —
+// it's simply retried next tick, no separate status/retry-policy needed.
+export const scheduledRecordings = sqliteTable(
+  "scheduled_recordings",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    // The rule that first claimed this slot — deliberately NOT a real FK.
+    // better-sqlite3 enables `PRAGMA foreign_keys` by default per connection
+    // (confirmed live: a bare `.references()` here caused deleting a rule
+    // with an existing scheduled_recordings row to fail with
+    // SQLITE_CONSTRAINT_FOREIGNKEY), which would silently contradict this
+    // project's own decided behavior — rules are hard-deleted (PLAN.md
+    // "Rule Matching") and deleting one doesn't retroactively touch
+    // anything already scheduled (PLAN.md "Minimal rule execution",
+    // "Explicitly not in this pass" — no cascade). A plain integer with no
+    // `rules` table lookup here keeps this row's audit trail intact even
+    // after the rule that created it is gone, and keeps rule deletion
+    // itself unblocked. Under multi-rule overlap, whichever rule's match
+    // wins the unique-index race below keeps this value permanently, even
+    // if a higher-priority rule matches the same slot in a later tick — it
+    // means "whichever rule first claimed this slot," not "the rule
+    // currently responsible for it."
+    ruleId: integer("rule_id").notNull(),
+    // From the match (epg_programs row), not the rule — a rule's own
+    // providerId can be null (matches any provider), but every match has a
+    // concrete provider/channel of its own.
+    providerId: integer("provider_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    // Denormalized: epg_programs rows are wholesale-replaced every EPG
+    // refresh, so this can't be a real FK to that table.
+    title: text("title").notNull(),
+    startTime: integer("start_time", { mode: "timestamp" }).notNull(),
+    endTime: integer("end_time", { mode: "timestamp" }).notNull(),
+    // iptv-recorder's own id for the created recording — always known,
+    // since a row is only ever inserted after a successful 201 response.
+    recorderRecordingId: integer("recorder_recording_id").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => ({
+    endAfterStart: check("scheduled_recordings_end_after_start", sql`${table.endTime} > ${table.startTime}`),
+    providerChannelStartIdx: uniqueIndex("scheduled_recordings_provider_channel_start_idx").on(
+      table.providerId,
+      table.channelId,
+      table.startTime,
+    ),
+  }),
+);
+
+// Singleton config row: whether the execution tick is allowed to actually
+// call iptv-recorder's POST /recordings (PLAN.md "Minimal rule execution").
+// Off by default (both in the application default and here at the DB
+// level) — this is the first feature that can make iptv-recorder actually
+// start recording, using real disk space and real concurrent-stream slots,
+// so the tick runs on a timer regardless but does nothing until this is
+// explicitly turned on via the Settings page.
+export const executionConfig = sqliteTable("execution_config", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  automaticSchedulingEnabled: integer("automatic_scheduling_enabled", { mode: "boolean" }).notNull().default(false),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 // Singleton config row: how this service reaches iptv-recorder (PLAN.md
 // "EPG Ingestion" — decided 2026-07-22, DB-backed rather than env-var-only,
 // so it's settable from a web UI). Nullable columns, not seeded with a

@@ -5,6 +5,7 @@ import { startEpgRefresh, stopEpgRefresh } from "./epg/index.js";
 import { channelRoutes } from "./routes/channels.js";
 import { configRoutes } from "./routes/config.js";
 import { ruleRoutes } from "./routes/rules.js";
+import { startScheduleExecution, stopScheduleExecution } from "./scheduling/index.js";
 
 const app = Fastify({ logger: true });
 
@@ -32,6 +33,7 @@ await app.register(channelRoutes);
 
 app.addHook("onClose", async () => {
   stopEpgRefresh();
+  stopScheduleExecution();
 });
 
 app.listen({ port, host: "0.0.0.0" }).catch((err) => {
@@ -40,3 +42,4 @@ app.listen({ port, host: "0.0.0.0" }).catch((err) => {
 });
 
 startEpgRefresh();
+startScheduleExecution();

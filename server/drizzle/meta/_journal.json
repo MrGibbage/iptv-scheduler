@@ -29,6 +29,20 @@
       "when": 1784735029647,
       "tag": "0003_jazzy_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784736797010,
+      "tag": "0004_rich_starjammers",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784737327775,
+      "tag": "0005_woozy_the_enforcers",
+      "breakpoints": true
     }
   ]
 }

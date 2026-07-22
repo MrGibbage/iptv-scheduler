@@ -10,3 +10,11 @@
 // this is deliberately much coarser than iptv-recorder's own 30s scheduler
 // tick. Default: 6 hours.
 export const EPG_REFRESH_INTERVAL_MS = Number(process.env.EPG_REFRESH_INTERVAL_MS ?? 6 * 60 * 60 * 1000);
+
+// PLAN.md "Minimal rule execution" — in-process interval, same reasoning as
+// EPG_REFRESH_INTERVAL_MS above (no external moving parts). Frequent enough
+// to act on newly-matching airings soon, far coarser than iptv-recorder's
+// own 30s dispatch tick, much finer than EPG's 6-hour refresh — guide data
+// is slow-changing, but a rule match becoming schedulable is time-
+// sensitive. Default: 15 minutes.
+export const EXECUTION_INTERVAL_MS = Number(process.env.EXECUTION_INTERVAL_MS ?? 15 * 60 * 1000);

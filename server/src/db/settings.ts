@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "./client.js";
-import { recorderConfig } from "./schema.js";
+import { executionConfig, recorderConfig } from "./schema.js";
 import { encrypt } from "../crypto.js";
 
 // Singleton row, created empty (both columns null) the first time anything
@@ -25,6 +25,30 @@ export function setRecorderConfig(input: { baseUrl: string; apiKey: string }): t
       updatedAt: new Date(),
     })
     .where(eq(recorderConfig.id, current.id))
+    .returning()
+    .all();
+  return updated;
+}
+
+// Singleton row, created off (default false) the first time anything asks
+// for it — matches the DB column's own default, so a lazily-created row is
+// unambiguously off even if created directly (PLAN.md "Minimal rule
+// execution").
+export function getExecutionConfig(): typeof executionConfig.$inferSelect {
+  const [existing] = db.select().from(executionConfig).all();
+  if (existing) {
+    return existing;
+  }
+  const [created] = db.insert(executionConfig).values({}).returning().all();
+  return created;
+}
+
+export function setExecutionConfig(input: { automaticSchedulingEnabled: boolean }): typeof executionConfig.$inferSelect {
+  const current = getExecutionConfig();
+  const [updated] = db
+    .update(executionConfig)
+    .set({ automaticSchedulingEnabled: input.automaticSchedulingEnabled, updatedAt: new Date() })
+    .where(eq(executionConfig.id, current.id))
     .returning()
     .all();
   return updated;

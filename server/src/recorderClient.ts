@@ -87,3 +87,52 @@ export async function testRecorderConnection(candidate: {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+export type RecorderRecording = {
+  id: number;
+  providerId: number;
+  channelId: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+};
+
+// PLAN.md "Minimal rule execution" — turns a rule match into a real
+// one-off POST /recordings call. Deliberately bypasses rawFetch/
+// recorderFetch above: those always throw on a non-2xx response, but a
+// business-level rejection here (bad shape, unknown provider, or
+// iptv-recorder's own hard-reject on concurrent-stream/storage/conflict)
+// is an expected, normal outcome the execution tick needs to branch on —
+// log and retry next tick, not abort. Only a genuine connectivity failure
+// (requireConnection() throwing RecorderNotConfiguredError, or fetch()
+// itself rejecting) still throws, so the tick can tell "abort this whole
+// cycle" apart from "this one match was rejected, move on."
+export async function scheduleRecording(input: {
+  providerId: number;
+  channelId: string;
+  startTime: Date;
+  endTime: Date;
+}): Promise<{ ok: true; recording: RecorderRecording } | { ok: false; status: number; error: string }> {
+  const { baseUrl, apiKey } = requireConnection();
+  const response = await fetch(`${baseUrl}/recordings`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      providerId: input.providerId,
+      channelId: input.channelId,
+      startTime: input.startTime.toISOString(),
+      endTime: input.endTime.toISOString(),
+    }),
+  });
+
+  if (response.status === 201) {
+    return { ok: true, recording: (await response.json()) as RecorderRecording };
+  }
+
+  // 400 (bad shape), 404 (unknown provider), 409 (hard-reject — concurrent-
+  // stream limit, storage, conflict) are all treated uniformly here: none
+  // of them indicate iptv-recorder itself is unreachable, so none of them
+  // should abort the tick.
+  const body = (await response.json().catch(() => ({ error: response.statusText }))) as { error?: string };
+  return { ok: false, status: response.status, error: body.error ?? response.statusText };
+}

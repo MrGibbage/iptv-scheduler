@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { getRecorderConfig, setRecorderConfig } from "../db/settings.js";
+import { getExecutionConfig, getRecorderConfig, setExecutionConfig, setRecorderConfig } from "../db/settings.js";
 import { testRecorderConnection } from "../recorderClient.js";
 
 const recorderUpdateSchema = {
@@ -35,6 +35,39 @@ function toResponse(config: { baseUrl: string | null; apiKeyEncrypted: string | 
   return {
     baseUrl: config.baseUrl,
     configured: Boolean(config.baseUrl && config.apiKeyEncrypted),
+    updatedAt: config.updatedAt.toISOString(),
+  };
+}
+
+const executionUpdateSchema = {
+  type: "object",
+  required: ["automaticSchedulingEnabled"],
+  properties: {
+    automaticSchedulingEnabled: { type: "boolean" },
+  },
+  additionalProperties: false,
+} as const;
+
+type ExecutionUpdateBody = {
+  automaticSchedulingEnabled: boolean;
+};
+
+// PLAN.md "Minimal rule execution" — off by default, no live test needed
+// here (unlike /config/recorder, this isn't credentials, just a flag the
+// execution tick reads every cycle).
+const executionConfigSchema = {
+  $id: "ExecutionConfig",
+  type: "object",
+  properties: {
+    automaticSchedulingEnabled: { type: "boolean" },
+    updatedAt: { type: "string", format: "date-time" },
+  },
+  required: ["automaticSchedulingEnabled", "updatedAt"],
+} as const;
+
+function toExecutionResponse(config: { automaticSchedulingEnabled: boolean; updatedAt: Date }) {
+  return {
+    automaticSchedulingEnabled: config.automaticSchedulingEnabled,
     updatedAt: config.updatedAt.toISOString(),
   };
 }
@@ -79,5 +112,28 @@ export async function configRoutes(app: FastifyInstance) {
       }
       return toResponse(setRecorderConfig({ baseUrl, apiKey }));
     },
+  );
+
+  app.addSchema(executionConfigSchema);
+
+  app.get(
+    "/config/execution",
+    {
+      schema: {
+        response: { 200: { $ref: "ExecutionConfig#" } },
+      },
+    },
+    async () => toExecutionResponse(getExecutionConfig()),
+  );
+
+  app.put<{ Body: ExecutionUpdateBody }>(
+    "/config/execution",
+    {
+      schema: {
+        body: executionUpdateSchema,
+        response: { 200: { $ref: "ExecutionConfig#" } },
+      },
+    },
+    async (request) => toExecutionResponse(setExecutionConfig(request.body)),
   );
 }
