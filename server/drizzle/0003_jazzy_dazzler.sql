@@ -1,0 +1,1 @@
+ALTER TABLE `rules` ADD `include_in_progress` integer DEFAULT true NOT NULL;
