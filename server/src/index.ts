@@ -5,6 +5,7 @@ import { startEpgRefresh, stopEpgRefresh } from "./epg/index.js";
 import { channelRoutes } from "./routes/channels.js";
 import { configRoutes } from "./routes/config.js";
 import { ruleRoutes } from "./routes/rules.js";
+import { scheduledRecordingRoutes } from "./routes/scheduledRecordings.js";
 import { startScheduleExecution, stopScheduleExecution } from "./scheduling/index.js";
 
 const app = Fastify({ logger: true });
@@ -30,6 +31,7 @@ app.get("/health/db", async () => {
 await app.register(configRoutes);
 await app.register(ruleRoutes);
 await app.register(channelRoutes);
+await app.register(scheduledRecordingRoutes);
 
 app.addHook("onClose", async () => {
   stopEpgRefresh();

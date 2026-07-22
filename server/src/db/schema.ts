@@ -220,7 +220,17 @@ export const scheduledRecordings = sqliteTable(
     // if a higher-priority rule matches the same slot in a later tick — it
     // means "whichever rule first claimed this slot," not "the rule
     // currently responsible for it."
-    ruleId: integer("rule_id").notNull(),
+    //
+    // Nullable as of TODO6 (manual scheduling, PLAN.md "Minimal Rule
+    // Execution"): a manually-booked one-off recording (POST
+    // /scheduled-recordings, no rule involved at all) stores null here.
+    // This still has to land in the same ledger so the automatic tick's
+    // dedup Set (server/src/scheduling/execute.ts) recognizes the slot as
+    // already handled — otherwise a rule created later that happens to
+    // match the same manually-booked airing would get a real (if
+    // harmless) 409 from iptv-recorder's own conflict check every tick,
+    // forever, instead of being correctly skipped as already-scheduled.
+    ruleId: integer("rule_id"),
     // From the match (epg_programs row), not the rule — a rule's own
     // providerId can be null (matches any provider), but every match has a
     // concrete provider/channel of its own.

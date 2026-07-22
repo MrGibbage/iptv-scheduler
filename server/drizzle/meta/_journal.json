@@ -43,6 +43,13 @@
       "when": 1784737327775,
       "tag": "0005_woozy_the_enforcers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784758020122,
+      "tag": "0006_lush_inhumans",
+      "breakpoints": true
     }
   ]
 }

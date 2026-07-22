@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, type Channel, type MatchedProgram, type Rule } from "../api";
 
+const PREVIEW_PAGE_SIZE = 20;
+
 type FormState = {
   name: string;
   seriesTitle: string;
@@ -96,6 +98,13 @@ export function RuleForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<MatchedProgram[] | "loading" | "idle">("idle");
+  const [visibleCount, setVisibleCount] = useState(PREVIEW_PAGE_SIZE);
+  // PLAN.md "Minimal Rule Execution" TODO6 — per-program manual-schedule
+  // status, keyed by MatchedProgram.id (stable within one EPG refresh
+  // cycle). Deliberately never cleared when the preview itself refetches —
+  // a status set while looking at one filter combination should still
+  // apply if the same program reappears under a different one.
+  const [scheduleStatus, setScheduleStatus] = useState<Map<number, "scheduling" | "scheduled" | string>>(new Map());
 
   useEffect(() => {
     api
@@ -124,6 +133,7 @@ export function RuleForm() {
       return;
     }
     setPreview("loading");
+    setVisibleCount(PREVIEW_PAGE_SIZE);
     const handle = setTimeout(() => {
       api
         .post<MatchedProgram[]>("/rules/preview", { ...toBody(form), name: form.name || "preview" })
@@ -149,6 +159,31 @@ export function RuleForm() {
       setError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // PLAN.md "Minimal Rule Execution" TODO6 — manual override: schedules
+  // this one program as a one-off recording, outside of any rule, via the
+  // same POST /scheduled-recordings -> scheduleRecording() path the
+  // automatic execution tick uses. confirm() before a real, consequential
+  // action mirrors Rules.tsx's existing delete-button convention.
+  async function handleSchedule(p: MatchedProgram) {
+    const when = new Date(p.startTime).toLocaleString();
+    if (!confirm(`Schedule a recording of "${p.title}" on ${p.channelName ?? `channel ${p.channelId}`} at ${when}?`)) {
+      return;
+    }
+    setScheduleStatus((prev) => new Map(prev).set(p.id, "scheduling"));
+    try {
+      await api.post("/scheduled-recordings", {
+        providerId: p.providerId,
+        channelId: p.channelId,
+        title: p.title,
+        startTime: p.startTime,
+        endTime: p.endTime,
+      });
+      setScheduleStatus((prev) => new Map(prev).set(p.id, "scheduled"));
+    } catch (err) {
+      setScheduleStatus((prev) => new Map(prev).set(p.id, err instanceof ApiError ? err.message : String(err)));
     }
   }
 
@@ -283,18 +318,43 @@ export function RuleForm() {
                 {previewSingleChannelName ? ` on ${previewSingleChannelName}` : ""}.
               </p>
               <ul className="preview-list">
-                {preview.slice(0, 20).map((p) => (
-                  <li key={p.id} className={p.nowPlaying ? "now-playing" : undefined}>
-                    {p.nowPlaying && <span className="now-playing-badge">NOW PLAYING</span>}
-                    <strong>{p.title}</strong> — {new Date(p.startTime).toLocaleString()}
-                    <div className="muted">
-                      {p.channelName ?? `Channel ${p.channelId}`}
-                      {p.category && ` · ${p.category}`}
-                    </div>
-                  </li>
-                ))}
+                {preview.slice(0, visibleCount).map((p) => {
+                  const status = scheduleStatus.get(p.id);
+                  return (
+                    <li key={p.id} className={p.nowPlaying ? "now-playing" : undefined}>
+                      {p.nowPlaying && <span className="now-playing-badge">NOW PLAYING</span>}
+                      <strong>{p.title}</strong> — {new Date(p.startTime).toLocaleString()}
+                      <div className="muted">
+                        {p.channelName ?? `Channel ${p.channelId}`}
+                        {p.category && ` · ${p.category}`}
+                      </div>
+                      <div>
+                        {status === "scheduled" && <span className="now-playing-badge">SCHEDULED</span>}
+                        {status === "scheduling" && (
+                          <button type="button" className="button-danger" disabled>
+                            Scheduling…
+                          </button>
+                        )}
+                        {status !== "scheduled" && status !== "scheduling" && (
+                          <button type="button" className="button-danger" onClick={() => handleSchedule(p)}>
+                            Schedule
+                          </button>
+                        )}
+                        {status && status !== "scheduled" && status !== "scheduling" && (
+                          <p className="error" style={{ fontSize: 13, margin: "4px 0 0" }}>
+                            {status}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
-              {preview.length > 20 && <p className="muted">…and {preview.length - 20} more</p>}
+              {preview.length > visibleCount && (
+                <button type="button" className="button-danger" onClick={() => setVisibleCount((v) => v + PREVIEW_PAGE_SIZE)}>
+                  Show {Math.min(PREVIEW_PAGE_SIZE, preview.length - visibleCount)} more
+                </button>
+              )}
             </>
           )}
         </div>

@@ -72,3 +72,15 @@ export type MatchedProgram = {
   endTime: string;
   nowPlaying: boolean;
 };
+
+export type ScheduledRecording = {
+  id: number;
+  ruleId: number | null;
+  providerId: number;
+  channelId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  recorderRecordingId: number;
+  createdAt: string;
+};
