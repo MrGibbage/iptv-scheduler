@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import { RecorderSettings } from "./RecorderSettings";
 import { Rules } from "./pages/Rules";
 import { RuleForm } from "./pages/RuleForm";
+import { ScheduledRecordings } from "./pages/ScheduledRecordings";
 import { Settings } from "./pages/Settings";
 
 type RecorderConfig = { baseUrl: string | null; configured: boolean; updatedAt: string };
@@ -59,6 +60,9 @@ function App() {
         <NavLink to="/rules" className={({ isActive }) => (isActive ? "active" : "")}>
           Rules
         </NavLink>
+        <NavLink to="/recordings" className={({ isActive }) => (isActive ? "active" : "")}>
+          Recordings
+        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => (isActive ? "active" : "")}>
           Settings
         </NavLink>
@@ -68,6 +72,7 @@ function App() {
         <Route path="/rules" element={<Rules />} />
         <Route path="/rules/new" element={<RuleForm />} />
         <Route path="/rules/:id/edit" element={<RuleForm />} />
+        <Route path="/recordings" element={<ScheduledRecordings />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </main>

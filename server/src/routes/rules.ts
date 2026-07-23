@@ -281,7 +281,7 @@ export async function ruleRoutes(app: FastifyInstance) {
       const [existing] = db.select().from(rules).where(eq(rules.id, id)).all();
       if (!existing) return reply.code(404).send({ error: "rule not found" });
       db.delete(rules).where(eq(rules.id, id)).run();
-      reply.code(204);
+      reply.code(204).send();
     },
   );
 

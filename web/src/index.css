@@ -359,3 +359,33 @@ main {
   color: var(--text);
   opacity: 0.7;
 }
+
+.status-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.status-badge.status-scheduled,
+.status-badge.status-recording {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.status-badge.status-failed {
+  color: #d33;
+  border-color: #d33;
+}
+
+.status-badge.status-completed,
+.status-badge.status-cancelled,
+.status-badge.status-unknown {
+  opacity: 0.7;
+}

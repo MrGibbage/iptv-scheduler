@@ -62,6 +62,38 @@ export async function listProviders(): Promise<RecorderProvider[]> {
   return response.json() as Promise<RecorderProvider[]>;
 }
 
+// GET /scheduled-recordings (this service's own route) needs iptv-recorder's
+// live status for every ledger row it displays — the local
+// scheduled_recordings table only ever knows "submitted successfully",
+// never what happened after (recording/completed/failed/cancelled). Fetched
+// unfiltered and matched up by id in the route handler, rather than one
+// request per row.
+export async function listRecordings(): Promise<RecorderRecording[]> {
+  const response = await recorderFetch("/recordings");
+  return response.json() as Promise<RecorderRecording[]>;
+}
+
+// DELETE /scheduled-recordings/:id needs to know a recording's status
+// *before* cancelling it, to decide whether the local ledger row should
+// survive the call (see cancelRecording below and PLAN.md "Web UI:
+// Recordings"). Deliberately returns null on a 404 rather than throwing —
+// "iptv-recorder no longer has this at all" is an expected, handled case
+// here (e.g. deleted directly through iptv-recorder's own UI), not a
+// connectivity failure.
+export async function getRecording(recorderRecordingId: number): Promise<RecorderRecording | null> {
+  const { baseUrl, apiKey } = requireConnection();
+  const response = await fetch(`${baseUrl}/recordings/${recorderRecordingId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(`iptv-recorder GET /recordings/${recorderRecordingId} returned ${response.status}: ${await response.text()}`);
+  }
+  return response.json() as Promise<RecorderRecording>;
+}
+
 // Raw, unredacted credentials — see iptv-recorder's PLAN.md, "Deliberate
 // exception" note on this endpoint, for why it's the one route that hands
 // these back. Never log or persist the result; use it for the immediate
@@ -95,6 +127,8 @@ export type RecorderRecording = {
   startTime: string;
   endTime: string;
   status: string;
+  filePath: string | null;
+  failureReason: string | null;
 };
 
 // PLAN.md "Minimal rule execution" — turns a rule match into a real
@@ -133,6 +167,28 @@ export async function scheduleRecording(input: {
   // stream limit, storage, conflict) are all treated uniformly here: none
   // of them indicate iptv-recorder itself is unreachable, so none of them
   // should abort the tick.
+  const body = (await response.json().catch(() => ({ error: response.statusText }))) as { error?: string };
+  return { ok: false, status: response.status, error: body.error ?? response.statusText };
+}
+
+// DELETE /scheduled-recordings/:id (this service's own route) proxies here.
+// Same bypass-rawFetch/recorderFetch reasoning as scheduleRecording above: a
+// 404 (already removed, e.g. via iptv-recorder's own UI) is an expected
+// outcome to pass straight through, not a thrown error. iptv-recorder's own
+// DELETE /recordings/:id already branches on active-vs-terminal status
+// itself (soft-cancel vs hard-delete) — this is a pure proxy, no local
+// branching needed.
+export async function cancelRecording(recorderRecordingId: number): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const { baseUrl, apiKey } = requireConnection();
+  const response = await fetch(`${baseUrl}/recordings/${recorderRecordingId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (response.status === 204) {
+    return { ok: true };
+  }
+
   const body = (await response.json().catch(() => ({ error: response.statusText }))) as { error?: string };
   return { ok: false, status: response.status, error: body.error ?? response.statusText };
 }

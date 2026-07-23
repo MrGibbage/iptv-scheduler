@@ -84,3 +84,11 @@ export type ScheduledRecording = {
   recorderRecordingId: number;
   createdAt: string;
 };
+
+export type ScheduledRecordingDetail = ScheduledRecording & {
+  ruleName: string | null;
+  channelName: string | null;
+  status: string | null;
+  filePath: string | null;
+  failureReason: string | null;
+};
