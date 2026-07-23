@@ -268,6 +268,14 @@ export const scheduledRecordings = sqliteTable(
 export const executionConfig = sqliteTable("execution_config", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   automaticSchedulingEnabled: integer("automatic_scheduling_enabled", { mode: "boolean" }).notNull().default(false),
+  // Separate opt-in from automaticSchedulingEnabled above, off by default
+  // (PLAN.md TODO3, "Conflict resolution policy") — this is the first
+  // feature that can make iptv-scheduler cancel a recording nobody asked it
+  // to cancel, a meaningfully bigger blast radius than just scheduling new
+  // ones, so it doesn't ride along with the existing toggle even though it
+  // only ever does anything when that one's also on. User-confirmed
+  // 2026-07-23: a separate toggle, not bundled.
+  preemptionEnabled: integer("preemption_enabled", { mode: "boolean" }).notNull().default(false),
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

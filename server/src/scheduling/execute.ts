@@ -3,7 +3,8 @@ import { db } from "../db/client.js";
 import { rules, scheduledRecordings } from "../db/schema.js";
 import { getExecutionConfig } from "../db/settings.js";
 import { matchRule } from "../rules/matcher.js";
-import { RecorderNotConfiguredError, scheduleRecording } from "../recorderClient.js";
+import { RecorderNotConfiguredError, listProviders, scheduleRecording, type RecorderProvider } from "../recorderClient.js";
+import { attemptPreemption, isPreemptable } from "./preempt.js";
 
 let ticking = false;
 
@@ -37,6 +38,7 @@ export async function runScheduleExecution(): Promise<void> {
   let scheduled = 0;
   let alreadyScheduled = 0;
   let rejected = 0;
+  let preemptedCount = 0;
 
   try {
     const enabledRules = db.select().from(rules).where(eq(rules.enabled, true)).orderBy(desc(rules.priority)).all();
@@ -56,6 +58,13 @@ export async function runScheduleExecution(): Promise<void> {
       .all();
     const seen = new Set(existing.map((r) => slotKey(r.providerId, r.channelId, r.startTime)));
 
+    // Only fetched when preemption is actually on — otherwise this would
+    // be an unused GET /providers call every tick (PLAN.md TODO3, "Conflict
+    // resolution policy"). Providers, not just the one on the rule being
+    // matched, since a provider-unscoped rule (rules.providerId === null)
+    // can match across more than one.
+    const providerById = config.preemptionEnabled ? new Map((await listProviders()).map((p): [number, RecorderProvider] => [p.id, p])) : new Map<number, RecorderProvider>();
+
     for (const rule of enabledRules) {
       for (const program of matchRule(rule)) {
         // From the match, not the rule — rules.providerId can be null
@@ -67,12 +76,38 @@ export async function runScheduleExecution(): Promise<void> {
           continue;
         }
 
-        const result = await scheduleRecording({
-          providerId: program.providerId,
-          channelId: program.channelId,
-          startTime: program.startTime,
-          endTime: program.endTime,
-        });
+        const attempt = () =>
+          scheduleRecording({
+            providerId: program.providerId,
+            channelId: program.channelId,
+            startTime: program.startTime,
+            endTime: program.endTime,
+          });
+
+        let result = await attempt();
+
+        if (!result.ok && config.preemptionEnabled && isPreemptable(result.error)) {
+          const provider = providerById.get(program.providerId);
+          if (provider) {
+            const { preempted } = await attemptPreemption({
+              providerId: program.providerId,
+              channelId: program.channelId,
+              startTime: program.startTime,
+              endTime: program.endTime,
+              maxConcurrentStreams: provider.maxConcurrentStreams,
+              currentPriority: rule.priority,
+            });
+            if (preempted.length > 0) {
+              preemptedCount += preempted.length;
+              for (const p of preempted) {
+                console.log(
+                  `[scheduling] preempted recording ${p.recorderRecordingId} (rule ${p.ruleId} "${p.ruleName}", scheduled_recordings.id=${p.scheduledRecordingId}) to make room for rule ${rule.id} "${rule.name}" — ${program.title} @ ${program.startTime.toISOString()}`,
+                );
+              }
+              result = await attempt();
+            }
+          }
+        }
 
         if (result.ok) {
           db.insert(scheduledRecordings)
@@ -106,5 +141,5 @@ export async function runScheduleExecution(): Promise<void> {
     ticking = false;
   }
 
-  console.log(`[scheduling] tick complete: scheduled=${scheduled} alreadyScheduled=${alreadyScheduled} rejected=${rejected}`);
+  console.log(`[scheduling] tick complete: scheduled=${scheduled} alreadyScheduled=${alreadyScheduled} preempted=${preemptedCount} rejected=${rejected}`);
 }

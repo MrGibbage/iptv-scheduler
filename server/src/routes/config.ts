@@ -39,35 +39,46 @@ function toResponse(config: { baseUrl: string | null; apiKeyEncrypted: string | 
   };
 }
 
+// Both fields optional — the Settings page has two independent checkboxes
+// (PLAN.md TODO3, "Conflict resolution policy"; preemptionEnabled added
+// 2026-07-23), each PUT-able without needing to resend the other's value.
 const executionUpdateSchema = {
   type: "object",
-  required: ["automaticSchedulingEnabled"],
   properties: {
     automaticSchedulingEnabled: { type: "boolean" },
+    preemptionEnabled: { type: "boolean" },
   },
   additionalProperties: false,
 } as const;
 
 type ExecutionUpdateBody = {
-  automaticSchedulingEnabled: boolean;
+  automaticSchedulingEnabled?: boolean;
+  preemptionEnabled?: boolean;
 };
 
 // PLAN.md "Minimal rule execution" — off by default, no live test needed
 // here (unlike /config/recorder, this isn't credentials, just a flag the
-// execution tick reads every cycle).
+// execution tick reads every cycle). preemptionEnabled (PLAN.md "Conflict
+// resolution policy") is a deliberately separate opt-in from
+// automaticSchedulingEnabled, off by default — it's the first feature that
+// can make this app cancel a recording nobody asked it to cancel, a bigger
+// blast radius than just scheduling new ones, even though it only ever
+// does anything while automaticSchedulingEnabled is also on.
 const executionConfigSchema = {
   $id: "ExecutionConfig",
   type: "object",
   properties: {
     automaticSchedulingEnabled: { type: "boolean" },
+    preemptionEnabled: { type: "boolean" },
     updatedAt: { type: "string", format: "date-time" },
   },
-  required: ["automaticSchedulingEnabled", "updatedAt"],
+  required: ["automaticSchedulingEnabled", "preemptionEnabled", "updatedAt"],
 } as const;
 
-function toExecutionResponse(config: { automaticSchedulingEnabled: boolean; updatedAt: Date }) {
+function toExecutionResponse(config: { automaticSchedulingEnabled: boolean; preemptionEnabled: boolean; updatedAt: Date }) {
   return {
     automaticSchedulingEnabled: config.automaticSchedulingEnabled,
+    preemptionEnabled: config.preemptionEnabled,
     updatedAt: config.updatedAt.toISOString(),
   };
 }

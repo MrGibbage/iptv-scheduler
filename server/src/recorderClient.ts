@@ -67,9 +67,13 @@ export async function listProviders(): Promise<RecorderProvider[]> {
 // scheduled_recordings table only ever knows "submitted successfully",
 // never what happened after (recording/completed/failed/cancelled). Fetched
 // unfiltered and matched up by id in the route handler, rather than one
-// request per row.
-export async function listRecordings(): Promise<RecorderRecording[]> {
-  const response = await recorderFetch("/recordings");
+// request per row. The optional providerId filter is for
+// ../scheduling/preempt.ts, which only ever needs one provider's
+// recordings at a time and would otherwise pull every provider's full
+// history just to look at one.
+export async function listRecordings(filter?: { providerId?: number }): Promise<RecorderRecording[]> {
+  const query = filter?.providerId !== undefined ? `?providerId=${filter.providerId}` : "";
+  const response = await recorderFetch(`/recordings${query}`);
   return response.json() as Promise<RecorderRecording[]>;
 }
 

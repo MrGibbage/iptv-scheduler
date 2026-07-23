@@ -1,0 +1,1 @@
+ALTER TABLE `execution_config` ADD `preemption_enabled` integer DEFAULT false NOT NULL;

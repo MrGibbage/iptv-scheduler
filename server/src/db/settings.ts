@@ -43,11 +43,18 @@ export function getExecutionConfig(): typeof executionConfig.$inferSelect {
   return created;
 }
 
-export function setExecutionConfig(input: { automaticSchedulingEnabled: boolean }): typeof executionConfig.$inferSelect {
+// Both fields optional/independent — the Settings page has two separate
+// checkboxes now (automatic scheduling, preemption), each PUT-able on its
+// own without clobbering the other's current value.
+export function setExecutionConfig(input: { automaticSchedulingEnabled?: boolean; preemptionEnabled?: boolean }): typeof executionConfig.$inferSelect {
   const current = getExecutionConfig();
   const [updated] = db
     .update(executionConfig)
-    .set({ automaticSchedulingEnabled: input.automaticSchedulingEnabled, updatedAt: new Date() })
+    .set({
+      automaticSchedulingEnabled: input.automaticSchedulingEnabled ?? current.automaticSchedulingEnabled,
+      preemptionEnabled: input.preemptionEnabled ?? current.preemptionEnabled,
+      updatedAt: new Date(),
+    })
     .where(eq(executionConfig.id, current.id))
     .returning()
     .all();

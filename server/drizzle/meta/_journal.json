@@ -50,6 +50,13 @@
       "when": 1784758020122,
       "tag": "0006_lush_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1784825729803,
+      "tag": "0007_secret_sharon_ventura",
+      "breakpoints": true
     }
   ]
 }
