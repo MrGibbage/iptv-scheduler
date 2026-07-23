@@ -69,6 +69,9 @@ export async function scheduledRecordingRoutes(app: FastifyInstance) {
     "/scheduled-recordings",
     {
       schema: {
+        tags: ["scheduled-recordings"],
+        summary: "Schedule a one-off recording",
+        description: "Books a specific program directly via iptv-recorder, outside of any rule. Business-level rejections (400/404/409) from iptv-recorder are passed straight through with its own status/reason.",
         body: scheduleBodySchema,
         response: {
           201: { $ref: "ScheduledRecording#" },

@@ -134,7 +134,15 @@ export async function ruleRoutes(app: FastifyInstance) {
   // `rules` table.
   app.post<{ Body: RuleBody }>(
     "/rules/preview",
-    { schema: { body: createBodySchema, response: { 200: { type: "array", items: { $ref: "MatchedProgram#" } }, 400: { $ref: "Error#" } } } },
+    {
+      schema: {
+        tags: ["rules"],
+        summary: "Preview an unsaved rule's matches",
+        description: "Runs the matcher against the given filters without creating anything — same shape as PUT /config/recorder's test-before-save.",
+        body: createBodySchema,
+        response: { 200: { type: "array", items: { $ref: "MatchedProgram#" } }, 400: { $ref: "Error#" } },
+      },
+    },
     async (request, reply) => {
       const body = request.body;
       if (!hasPositiveFilter(body)) {
@@ -158,7 +166,14 @@ export async function ruleRoutes(app: FastifyInstance) {
 
   app.post<{ Body: RuleBody }>(
     "/rules",
-    { schema: { body: createBodySchema, response: { 201: { $ref: "Rule#" }, 400: { $ref: "Error#" } } } },
+    {
+      schema: {
+        tags: ["rules"],
+        summary: "Create a rule",
+        body: createBodySchema,
+        response: { 201: { $ref: "Rule#" }, 400: { $ref: "Error#" } },
+      },
+    },
     async (request, reply) => {
       const body = request.body;
       if (!hasPositiveFilter(body)) {
@@ -187,13 +202,17 @@ export async function ruleRoutes(app: FastifyInstance) {
     },
   );
 
-  app.get("/rules", { schema: { response: { 200: { type: "array", items: { $ref: "Rule#" } } } } }, async () => {
-    return db.select().from(rules).all();
-  });
+  app.get(
+    "/rules",
+    { schema: { tags: ["rules"], summary: "List rules", response: { 200: { type: "array", items: { $ref: "Rule#" } } } } },
+    async () => {
+      return db.select().from(rules).all();
+    },
+  );
 
   app.get<{ Params: { id: string } }>(
     "/rules/:id",
-    { schema: { response: { 200: { $ref: "Rule#" }, 404: { $ref: "Error#" } } } },
+    { schema: { tags: ["rules"], summary: "Get a rule", response: { 200: { $ref: "Rule#" }, 404: { $ref: "Error#" } } } },
     async (request, reply) => {
       const [row] = db.select().from(rules).where(eq(rules.id, Number(request.params.id))).all();
       if (!row) return reply.code(404).send({ error: "rule not found" });
@@ -203,7 +222,15 @@ export async function ruleRoutes(app: FastifyInstance) {
 
   app.put<{ Params: { id: string }; Body: RuleBody }>(
     "/rules/:id",
-    { schema: { body: updateBodySchema, response: { 200: { $ref: "Rule#" }, 400: { $ref: "Error#" }, 404: { $ref: "Error#" } } } },
+    {
+      schema: {
+        tags: ["rules"],
+        summary: "Update a rule",
+        description: "Partial update — omitted fields are left as-is. Rejected with 400 if the merged result would leave the rule with no positive filter.",
+        body: updateBodySchema,
+        response: { 200: { $ref: "Rule#" }, 400: { $ref: "Error#" }, 404: { $ref: "Error#" } },
+      },
+    },
     async (request, reply) => {
       const id = Number(request.params.id);
       const [existing] = db.select().from(rules).where(eq(rules.id, id)).all();
@@ -241,7 +268,14 @@ export async function ruleRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>(
     "/rules/:id",
-    { schema: { response: { 204: { type: "null" }, 404: { $ref: "Error#" } } } },
+    {
+      schema: {
+        tags: ["rules"],
+        summary: "Delete a rule",
+        description: "Hard delete, not soft — and doesn't retroactively touch anything already scheduled via this rule (see scheduled_recordings).",
+        response: { 204: { type: "null" }, 404: { $ref: "Error#" } },
+      },
+    },
     async (request, reply) => {
       const id = Number(request.params.id);
       const [existing] = db.select().from(rules).where(eq(rules.id, id)).all();
@@ -257,7 +291,13 @@ export async function ruleRoutes(app: FastifyInstance) {
   // separate, later work — TODO2/TODO3).
   app.get<{ Params: { id: string } }>(
     "/rules/:id/matches",
-    { schema: { response: { 200: { type: "array", items: { $ref: "MatchedProgram#" } }, 404: { $ref: "Error#" } } } },
+    {
+      schema: {
+        tags: ["rules"],
+        summary: "Get a rule's current matches",
+        response: { 200: { type: "array", items: { $ref: "MatchedProgram#" } }, 404: { $ref: "Error#" } },
+      },
+    },
     async (request, reply) => {
       const [rule] = db.select().from(rules).where(eq(rules.id, Number(request.params.id))).all();
       if (!rule) return reply.code(404).send({ error: "rule not found" });

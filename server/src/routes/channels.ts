@@ -31,6 +31,8 @@ export async function channelRoutes(app: FastifyInstance) {
     "/channels",
     {
       schema: {
+        tags: ["channels"],
+        summary: "List cached channels",
         querystring: { type: "object", properties: { providerId: { type: "string" } }, additionalProperties: false },
         response: { 200: { type: "array", items: { $ref: "Channel#" } } },
       },

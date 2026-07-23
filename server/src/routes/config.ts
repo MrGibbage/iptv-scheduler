@@ -84,6 +84,8 @@ export async function configRoutes(app: FastifyInstance) {
     "/config/recorder",
     {
       schema: {
+        tags: ["config"],
+        summary: "Get recorder connection config",
         response: { 200: { $ref: "RecorderConfig#" } },
       },
     },
@@ -99,7 +101,9 @@ export async function configRoutes(app: FastifyInstance) {
     "/config/recorder",
     {
       schema: {
-        // Validates the given baseUrl/apiKey against iptv-recorder before saving.
+        tags: ["config"],
+        summary: "Set recorder connection config",
+        description: "Tests the candidate baseUrl/apiKey against iptv-recorder before saving — a bad pair is rejected with a reason instead of failing silently later.",
         body: recorderUpdateSchema,
         response: { 200: { $ref: "RecorderConfig#" }, 400: { $ref: "Error#" } },
       },
@@ -120,6 +124,8 @@ export async function configRoutes(app: FastifyInstance) {
     "/config/execution",
     {
       schema: {
+        tags: ["config"],
+        summary: "Get automatic-scheduling config",
         response: { 200: { $ref: "ExecutionConfig#" } },
       },
     },
@@ -130,6 +136,8 @@ export async function configRoutes(app: FastifyInstance) {
     "/config/execution",
     {
       schema: {
+        tags: ["config"],
+        summary: "Set automatic-scheduling config",
         body: executionUpdateSchema,
         response: { 200: { $ref: "ExecutionConfig#" } },
       },
