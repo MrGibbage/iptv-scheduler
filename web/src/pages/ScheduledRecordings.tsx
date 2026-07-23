@@ -45,6 +45,24 @@ export function ScheduledRecordings() {
     }
   }
 
+  // A cancelled row that could only ever be deleted was a dead end (user
+  // feedback: "if we can't reactivate it, then what's the point in keeping
+  // it around?"). iptv-recorder can't un-cancel a specific recording, so
+  // this re-submits the same slot as a new one — server/src/routes/
+  // scheduledRecordings.ts's /reactivate route handles that.
+  async function handleReactivate(row: ScheduledRecordingDetail) {
+    if (!confirm(`Reactivate "${row.title}" (${new Date(row.startTime).toLocaleString()})? This books a new recording for the same slot.`)) return;
+    setBusyId(row.id);
+    try {
+      await api.post(`/scheduled-recordings/${row.id}/reactivate`, {});
+      refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -74,6 +92,7 @@ export function ScheduledRecordings() {
           <tbody>
             {rows.map((row) => {
               const active = row.status !== null && ACTIVE_STATUSES.has(row.status);
+              const canReactivate = row.status === "cancelled" && new Date(row.endTime) > new Date();
               return (
                 <tr key={row.id}>
                   <td>{row.title}</td>
@@ -86,9 +105,16 @@ export function ScheduledRecordings() {
                     {row.status === "failed" && row.failureReason && <div className="muted">{row.failureReason}</div>}
                   </td>
                   <td>
-                    <button onClick={() => handleDelete(row)} disabled={busyId === row.id} className="button-danger">
-                      {active ? "Cancel" : "Delete"}
-                    </button>
+                    <div className="row-actions">
+                      {canReactivate && (
+                        <button onClick={() => handleReactivate(row)} disabled={busyId === row.id} className="button-reactivate">
+                          Reactivate
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(row)} disabled={busyId === row.id} className="button-danger">
+                        {active ? "Cancel" : "Delete"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

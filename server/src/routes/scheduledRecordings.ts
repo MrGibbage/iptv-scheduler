@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { channels, rules, scheduledRecordings } from "../db/schema.js";
 import { RecorderNotConfiguredError, cancelRecording, getRecording, listRecordings, scheduleRecording } from "../recorderClient.js";
@@ -111,6 +111,35 @@ const scheduledRecordingDetailSchema = {
     "failureReason",
   ],
 } as const;
+
+// Single-row equivalent of GET /scheduled-recordings' bulk enrichment above
+// — used only by POST /scheduled-recordings/:id/reactivate below, where two
+// extra one-off queries are cheap (a single row, not a whole list) and not
+// worth threading the bulk maps through for.
+function toDetailResponse(row: typeof scheduledRecordings.$inferSelect, live: { status: string; filePath: string | null; failureReason: string | null } | null) {
+  const [rule] = row.ruleId !== null ? db.select({ name: rules.name }).from(rules).where(eq(rules.id, row.ruleId)).all() : [];
+  const [channel] = db
+    .select({ name: channels.name })
+    .from(channels)
+    .where(and(eq(channels.providerId, row.providerId), eq(channels.channelId, row.channelId)))
+    .all();
+  return {
+    id: row.id,
+    ruleId: row.ruleId,
+    ruleName: rule?.name ?? null,
+    providerId: row.providerId,
+    channelId: row.channelId,
+    channelName: channel?.name ?? null,
+    title: row.title,
+    startTime: row.startTime.toISOString(),
+    endTime: row.endTime.toISOString(),
+    recorderRecordingId: row.recorderRecordingId,
+    createdAt: row.createdAt.toISOString(),
+    status: live?.status ?? null,
+    filePath: live?.filePath ?? null,
+    failureReason: live?.failureReason ?? null,
+  };
+}
 
 // PLAN.md "Minimal Rule Execution" TODO6 — manual override: schedule one
 // specific EPG program as a one-off recording outside of any rule, via the
@@ -310,6 +339,87 @@ export async function scheduledRecordingRoutes(app: FastifyInstance) {
       }
 
       return reply.code(204).send();
+    },
+  );
+
+  // A cancelled row that could only ever be deleted was a dead end (user
+  // feedback 2026-07-23: "if we can't reactivate it, then what's the point
+  // in keeping it around?"). iptv-recorder has no way to un-cancel a
+  // specific recording once soft-cancelled (its DELETE only ever sets
+  // status: "cancelled", never back) — so "reactivate" means re-submitting
+  // the same provider/channel/time window as a brand-new recording and
+  // repointing this same ledger row at it, not resurrecting the old one.
+  app.post<{ Params: { id: string } }>(
+    "/scheduled-recordings/:id/reactivate",
+    {
+      schema: {
+        tags: ["scheduled-recordings"],
+        summary: "Reactivate a cancelled recording",
+        description: "Re-submits the same provider/channel/time window as a new iptv-recorder recording and points this ledger row at it. Only valid while the original endTime is still in the future (nothing left to record otherwise), and only for a row whose live status is currently 'cancelled'.",
+        response: {
+          200: { $ref: "ScheduledRecordingDetail#" },
+          400: { $ref: "Error#" },
+          404: { $ref: "Error#" },
+          409: { $ref: "Error#" },
+          502: { $ref: "Error#" },
+          503: { $ref: "Error#" },
+        },
+      },
+    },
+    async (request, reply) => {
+      const id = Number(request.params.id);
+      const [row] = db.select().from(scheduledRecordings).where(eq(scheduledRecordings.id, id)).all();
+      if (!row) {
+        return reply.code(404).send({ error: "scheduled recording not found" });
+      }
+
+      if (row.endTime.getTime() <= Date.now()) {
+        return reply.code(400).send({ error: "cannot reactivate: this airing has already ended" });
+      }
+
+      let before: Awaited<ReturnType<typeof getRecording>>;
+      try {
+        before = await getRecording(row.recorderRecordingId);
+      } catch (err) {
+        if (err instanceof RecorderNotConfiguredError) {
+          return reply.code(503).send({ error: err.message });
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(502).send({ error: `could not reach iptv-recorder: ${message}` });
+      }
+
+      if (before === null || before.status !== "cancelled") {
+        return reply.code(400).send({ error: "only a cancelled recording can be reactivated" });
+      }
+
+      let result;
+      try {
+        result = await scheduleRecording({
+          providerId: row.providerId,
+          channelId: row.channelId,
+          startTime: row.startTime,
+          endTime: row.endTime,
+        });
+      } catch (err) {
+        if (err instanceof RecorderNotConfiguredError) {
+          return reply.code(503).send({ error: err.message });
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        return reply.code(502).send({ error: `could not reach iptv-recorder: ${message}` });
+      }
+
+      if (!result.ok) {
+        return reply.code(result.status).send({ error: result.error });
+      }
+
+      const [updated] = db
+        .update(scheduledRecordings)
+        .set({ recorderRecordingId: result.recording.id })
+        .where(eq(scheduledRecordings.id, id))
+        .returning()
+        .all();
+
+      return reply.code(200).send(toDetailResponse(updated, result.recording));
     },
   );
 }

@@ -269,6 +269,21 @@ main {
   cursor: pointer;
 }
 
+.button-reactivate {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .rules-table {
   width: 100%;
   border-collapse: collapse;
